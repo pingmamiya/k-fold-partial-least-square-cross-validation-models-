@@ -1,0 +1,125 @@
+---
+title: "Predicting_CarSale"
+author: "Ping Chao Mamiya"
+date: "4/28/2021"
+output: pdf_document
+---
+
+```{r }
+library(tidyverse)
+```
+
+
+```{r}
+car_listings<-read.table("/Users/pcmamiya/Documents/DataQuest/Project5/imports-85.data", header = FALSE, sep = ",")
+
+#rename the columns
+car_listings<-car_listings%>%
+  rename( symboling = V1, normalized_losses=V2, make = V3, fule_type = V4, aspiration = V5, num_doors = V6, body_style = V7, drive_wheels = V8, engine_location = V9, wheel_base = V10,
+          length = V11, width = V12, height = V13, curb_weight = V14, engine_type = V15,
+          num_cylinders = V16, engine_size = V17, fule_system = V18, bore = V19, stroke = V20,
+          compression_ratio = V21, horsepower = V22, peak_rpm = V23, city_mpg = V24,
+          highway_mpg = V25, price = V26)
+```
+
+
+
+```{r }
+#data cleaning - removing rows that contain ?
+#data cleaning - replacing num_doors with numeric values.
+#select columns that can be used as features in the model
+#price needs to be convereted to a numeric valuable.
+selected_car_listing<-car_listings%>%
+  mutate(num_doors = if_else(num_doors == "four", 2, 4))%>%
+  select(make, horsepower, city_mpg, highway_mpg, num_doors, price)%>%
+  filter(!price=="?" & !horsepower=="?" & !highway_mpg=="?" & !city_mpg=="?")%>%
+  mutate(price2=as.character(price))%>%
+  mutate(price=as.numeric(price2))
+
+```
+
+
+```{r}
+#exploring  associations of potential features and price
+
+library(caret)
+x = selected_car_listing$horsepower
+y = selected_car_listing$price
+featurePlot(x = selected_car_listing[,2:5], 
+            y = selected_car_listing$price,
+            plot = "pairs")
+```
+
+
+The lattice grpahs demonstarte a robust association between highway_mpg and price. Interestingly, city_mpg and price has bi-modal ditributions. On the other hand, make has no relationship with the price at all. Based on these graphs, it appears that city_mpg and highway_mpg could be features to predict price in the model.
+
+
+
+
+```{r}
+#Use k-nearest neighbor and partial least square algorithsms to train the model.
+car_indices<-createDataPartition(selected_car_listing$price, p=0.8, list = FALSE)
+train_car_listings<-selected_car_listing[car_indices,]
+test_car_listings<-selected_car_listing[-car_indices,]
+
+car_control<-trainControl(method = "cv", number = 5)
+hyperparameter_car_grid<-expand_grid(k=1:3)
+
+
+knn_car<-train(price ~ horsepower + highway_mpg + city_mpg,
+               data = train_car_listings,
+               method = "knn",
+               trControl = car_control,
+               preProcess = c("center","scale"),
+               tuneLength = 7
+               )
+
+knn_car
+plot(knn_car)
+
+pls_car<-train(price~ horsepower + highway_mpg + city_mpg, 
+               data = selected_car_listing,
+               method = "pls",
+               trControl = rpcv_car_control,
+               preProcess = c("center","scale"),
+               tuneLength = 15,
+               metric = "ROC"
+)
+pls_car
+plot(pls_car)
+```
+
+1. Using repeated cross-validation yielded a model selection that is similar to the one using cross-validation. In both cases, 5-fold cross-validation was used.
+2. The pls model gives out the ROC (Receiver Operational Curve) metric, which indicates the specificity and the sensitivity of the model.
+
+
+```{r}
+# predict the sale price using the above two models, knn_car and pls_car
+knn_car_predict<-predict(knn_car, newdata = test_car_listings)
+pls_car_predict<-predict(pls_car, newdata = test_car_listings)
+
+knn_car_performance<-postResample(knn_car_predict, test_car_listings$price)
+pls_car_performance<-postResample(pls_car_predict, test_car_listings$price)
+```
+
+1. knn model yields RMSE = 7402.77 whereas pls model yields RMSE = 1790.77. Based on these numbers,
+   pls model predicts car price more accurately than the knn model because of a smaller RMSE.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
